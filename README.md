@@ -1,12 +1,12 @@
-# mvp-notas-whatsapp
+# Ciclus Agro
 
-Sistema MVP para receber, processar, organizar e revisar documentos de custo, como notas fiscais, recibos, comprovantes, documentos enviados por upload web e documentos enviados pelo WhatsApp.
+Sistema de automação operacional da Ciclus Agro via WhatsApp, com módulos para documentos, despesas e visitas técnicas, apoiado por painel web e relatórios.
 
 O projeto nasceu como um experimento simples para leitura de nota fiscal por imagem, mas evoluiu para um fluxo local mais completo de captura, processamento, conferencia manual, armazenamento e exportacao.
 
 ## Objetivo
 
-O objetivo do `mvp-notas-whatsapp` e apoiar a organizacao de documentos de custo em um fluxo pratico:
+O objetivo do Ciclus Agro e apoiar rotinas operacionais e de campo em fluxos digitais integrados ao WhatsApp:
 
 - receber documentos pela interface web;
 - receber imagens e documentos pelo WhatsApp Cloud API;
@@ -229,7 +229,7 @@ git ls-files
 
 ## Relacao com o projeto lucreagro-ficha-unica
 
-Este projeto serviu como base pratica para aprendizados reutilizados no projeto `lucreagro-ficha-unica`, especialmente em:
+O Ciclus Agro serviu como base pratica para aprendizados reutilizados no projeto `lucreagro-ficha-unica`, especialmente em:
 
 - upload de arquivos;
 - organizacao documental;
@@ -240,7 +240,7 @@ Este projeto serviu como base pratica para aprendizados reutilizados no projeto 
 
 ## Aviso
 
-O `mvp-notas-whatsapp` e um projeto de MVP e estudo aplicado. Para uso em producao, ainda seria necessario reforcar autenticacao, autorizacao, auditoria, backups, tratamento de dados pessoais, armazenamento seguro de arquivos e politicas formais de retencao.
+O Ciclus Agro e um projeto de automacao aplicada em evolucao. Para uso em producao, ainda seria necessario reforcar autenticacao, autorizacao, auditoria, backups, tratamento de dados pessoais, armazenamento seguro de arquivos e politicas formais de retencao.
 
 ## Producao Ciclus/RDV
 
