@@ -249,7 +249,10 @@ def test_rdv_excel_commands_support_month_week_and_specific_references():
                 sender,
                 api_whatsapp.calculate_month_reference(api_whatsapp.date.today()),
             )
-            assert monthly[1] == (sender, "2026-06")
+            assert monthly[1] == (
+                sender,
+                api_whatsapp.calculate_month_reference(api_whatsapp.date.today()),
+            )
             assert monthly[2] == (sender, "2026-06")
             assert weekly[0] == (
                 sender,
