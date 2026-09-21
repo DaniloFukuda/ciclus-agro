@@ -1,253 +1,106 @@
 # Ciclus Agro
 
-Sistema de automação operacional da Ciclus Agro via WhatsApp, com módulos para documentos, despesas e visitas técnicas, apoiado por painel web e relatórios.
+Sistema de automação operacional para equipes do agronegócio, com fluxos via WhatsApp, painel web, controle de RDV/despesas, visitas técnicas e relatórios.
 
-O projeto nasceu como um experimento simples para leitura de nota fiscal por imagem, mas evoluiu para um fluxo local mais completo de captura, processamento, conferencia manual, armazenamento e exportacao.
+O projeto reúne captura e organização de documentos, rotinas de campo e acompanhamento administrativo em serviços persistidos em SQLite.
 
-## Objetivo
+## Funcionalidades
 
-O objetivo do Ciclus Agro e apoiar rotinas operacionais e de campo em fluxos digitais integrados ao WhatsApp:
+### WhatsApp e documentos
 
-- receber documentos pela interface web;
-- receber imagens e documentos pelo WhatsApp Cloud API;
-- tentar extrair dados por QR Code e OCR;
-- classificar o documento como nota fiscal, recibo ou comprovante;
-- registrar os resultados em SQLite;
-- manter apoio/exportacao em CSV;
-- permitir revisao manual, filtros, correcao e exclusao de registros.
+- Webhook compatível com a WhatsApp Cloud API.
+- Recebimento de mensagens, imagens e documentos.
+- Deduplicação por identificador de mensagem e hash de mídia.
+- Processamento documental com QR Code e OCR complementar.
+- Classificação de nota fiscal, recibo e comprovante.
+- Fluxos e respostas automatizadas quando a integração está configurada.
 
-Este ainda e um MVP local. Ele foi pensado para aprendizado, validacao de fluxo e apoio operacional, nao como sistema final de producao.
+### RDV e despesas
+
+- Registro de despesas e comprovantes pelo painel e pelo WhatsApp.
+- Categorias, colaboradores, status de revisão e filtros operacionais.
+- Consultas por colaborador e período.
+- Exportações CSV e relatórios semanais/mensais em Excel e PDF.
+
+### Visitas técnicas
+
+- Abertura e acompanhamento de visitas pelo WhatsApp.
+- Dados de propriedade, responsável, área, safra, descrição e observações.
+- Registro de localização e coordenadas quando disponíveis.
+- Histórico persistido de visitas e comandos de consulta.
+- Relatórios individuais em PDF e exportação em Excel.
+
+### Painel web
+
+- Aplicação FastAPI para upload, consulta, filtros, edição e revisão de documentos.
+- Painel RDV para lançamento, acompanhamento e revisão de despesas.
+- Health check e rotas auxiliares para operação controlada.
 
 ## Arquitetura
 
-A arquitetura atual combina componentes simples:
-
-- **FastAPI**: expoe a aplicacao web, as telas de upload/revisao e rotas auxiliares de API.
-- **Nucleo**: coordena o processamento, escolhe o agente correto e salva os resultados.
-- **Agentes**: encapsulam a logica de leitura de documentos. Ha agente para nota fiscal e agente para recibo/comprovante.
-- **SQLite**: banco local usado para registrar documentos processados, estados de conferencia, metadados e controle de duplicidade.
-- **CSV**: usado como apoio historico/exportacao, especialmente para consumo em planilhas.
-- **WhatsApp Cloud API**: canal de entrada para mensagens, imagens e documentos enviados pelo WhatsApp.
-- **n8n/ngrok**: podem ser usados em testes e integracoes para expor webhook local, automatizar chamadas ou simular fluxos externos.
-
-## Funcionalidades atuais
-
-- Upload manual de documentos pela web.
-- Processamento de nota fiscal por QR Code e OCR complementar.
-- Processamento de recibo/comprovante por OCR.
-- Registro dos documentos em SQLite.
-- Registro e apoio em CSV.
-- Tela `/documentos` para listar documentos validos/processados.
-- Tela `/documentos/erros` para revisar registros incompletos, invalidos ou com falha.
-- Edicao e conferencia manual dos dados extraidos.
-- Exclusao/apagar registros pela interface.
-- Filtros por data, mes/ano, hora, tipo, categoria e responsavel/origem.
-- Exportacao CSV dos documentos filtrados.
-- Integracao com WhatsApp Cloud API.
-- Webhook de verificacao do WhatsApp.
-- Recebimento de imagens/documentos pelo WhatsApp.
-- Classificacao por legenda/caption enviada junto com a midia.
-- Deduplicacao por `whatsapp_message_id` e `whatsapp_image_sha256`.
-- Tratamento de erro quando nao for possivel baixar midia do WhatsApp.
-- Resposta automatica pelo WhatsApp quando possivel.
-- Mascaramento/cuidado com token, telefone, IDs e logs sensiveis.
-
-## Modulo Ciclus Agro - RDV por WhatsApp
-
-O primeiro modulo de RDV registra despesas manuais e comprovantes recebidos pelo
-WhatsApp. A tela `/rdv` permite filtrar por semana, colaborador, categoria e
-status, revisar despesas, consultar totais e exportar CSV.
-
-No WhatsApp, as mensagens `menu`, `oi`, `rdv` ou `despesa` orientam o
-colaborador cadastrado a enviar o comprovante. O arquivo fica salvo na area
-local ignorada pelo Git e o lancamento avanca de forma persistente pelas etapas
-de valor, categoria, conclusao e revisao.
-
-### Fluxo operacional por colaborador
-
-A rota `/ciclus/rdv` apresenta os lancamentos recebidos por colaborador, com
-filtros por semana e status, totais consolidados e pendencias de revisao. O
-relatorio semanal tambem esta disponivel em
-`/ciclus/rdv/relatorio-semanal`.
-
-A exportacao Excel semanal fica em
-`/ciclus/rdv/relatorio-semanal.xlsx` e gera as abas `Lancamentos`,
-`Resumo por Colaborador`, `Resumo por Categoria` e `Pendencias`.
-
-O cadastro inicial cria Danilo, Marcelo, Henrique e Anderson com telefones
-deliberadamente ficticios. Em um ambiente real, esses telefones devem ser
-substituidos no cadastro persistente, sem incluir dados pessoais no codigo.
-
-Para um colaborador ativo e identificado pelo telefone do remetente, o fluxo e:
-
-1. enviar a foto ou o documento do comprovante;
-2. informar o valor solicitado;
-3. escolher a categoria;
-4. receber a confirmacao do lancamento completo e pendente de revisao.
-
-Validacoes locais do modulo:
-
-```powershell
-python scripts/test_rdv_service.py
-python scripts/test_whatsapp_rdv_flow.py
-python scripts/test_rdv_collaborators.py
-python scripts/test_ciclus_rdv_web.py
-python scripts/test_rdv_excel_export.py
-```
-
-## Como rodar localmente
-
-Crie e ative um ambiente virtual:
-
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-Instale as dependencias:
-
-```powershell
-pip install -r requirements.txt
-```
-
-Rode a aplicacao web principal:
-
-```powershell
-python -m uvicorn web_upload:app --reload
-```
-
-Depois acesse a aplicacao local no navegador, normalmente em:
-
 ```text
-http://127.0.0.1:8000
+WhatsApp Cloud API                 Painel web
+        │                              │
+        └──── webhook FastAPI ─────────┘
+                       │
+          serviços e regras de domínio
+          ├── documentos e processamento
+          ├── RDV / despesas
+          ├── visitas técnicas
+          └── relatórios PDF e Excel
+                       │
+                     SQLite
 ```
 
-Arquivos auxiliares:
+| Camada | Responsabilidade |
+|---|---|
+| `web_upload.py` | Aplicação FastAPI, painel web e rotas de RDV |
+| `api_whatsapp.py` | Verificação do webhook, recebimento e roteamento WhatsApp |
+| `services/` | RDV, visitas, processamento documental e relatórios |
+| `core/` | Persistência SQLite, armazenamento e núcleo de processamento |
+| `agents/` | Agentes determinísticos de documentos |
+| `tests/` | Cobertura automatizada de regras e integrações |
 
-- `web_upload.py`: aplicacao web principal, com upload, listagem, filtros, edicao, erros, exportacao CSV e rotas do webhook.
-- `api.py`: API auxiliar para processamento por chamadas HTTP.
-- `api_whatsapp.py`: rotas e funcoes de integracao com WhatsApp Cloud API, incluindo verificacao de webhook, recebimento de mensagens e download de midia.
+## Stack
 
-## Variaveis de ambiente
+- Python
+- FastAPI e Uvicorn
+- SQLite
+- WhatsApp Cloud API
+- OpenCV, PyTesseract, PyMuPDF e QR Code
+- ReportLab e OpenPyXL
+- Pytest
 
-Crie um arquivo `.env` local com os valores necessarios para o WhatsApp e integracoes. Nunca commite esse arquivo.
+## Executar localmente
 
-Variaveis usadas pelo projeto:
-
-```env
-WHATSAPP_VERIFY_TOKEN=
-WHATSAPP_ACCESS_TOKEN=
-WHATSAPP_PHONE_NUMBER_ID=
-WHATSAPP_BUSINESS_ACCOUNT_ID=
-WHATSAPP_GRAPH_API_VERSION=
-WHATSAPP_TEST_RECIPIENT_PHONE=
-BASE_PUBLIC_URL=
+```bash
+python -m venv .venv
+source .venv/Scripts/activate  # Git Bash no Windows
+python -m pip install -r requirements.txt
+python -m uvicorn web_upload:app --reload --port 8000
 ```
 
-Observacoes:
+A aplicação fica disponível, por padrão, em `http://127.0.0.1:8000`.
 
-- `WHATSAPP_VERIFY_TOKEN` deve bater com o token configurado no painel do webhook da Meta.
-- `WHATSAPP_ACCESS_TOKEN` e um token sensivel e deve ficar somente no ambiente local/seguro.
-- `WHATSAPP_PHONE_NUMBER_ID` identifica o numero usado pela Cloud API.
-- `WHATSAPP_BUSINESS_ACCOUNT_ID` identifica a conta empresarial do WhatsApp.
-- `WHATSAPP_GRAPH_API_VERSION` define a versao da Graph API usada nas chamadas.
-- `WHATSAPP_TEST_RECIPIENT_PHONE` pode ser usado por scripts de teste de envio.
-- `BASE_PUBLIC_URL` ajuda a montar links publicos quando o webhook estiver exposto via ngrok ou ambiente similar.
+## Configuração segura
 
-Diagnostico seguro da Cloud API:
+Crie um `.env` local a partir de `.env.example` e mantenha credenciais apenas no ambiente privado. As configurações cobrem a WhatsApp Cloud API, a URL pública do webhook e opções operacionais de relatórios.
 
-```powershell
-python scripts\diagnose_whatsapp_cloud_api.py
+Nunca versione:
+
+- `.env`, tokens, senhas ou chaves privadas;
+- bancos SQLite, backups e logs operacionais;
+- uploads, documentos, fotografias, PDFs ou planilhas reais;
+- identificadores de clientes, telefones ou payloads de produção.
+
+## Testes
+
+```bash
+python -m pytest -q --basetemp=C:/Users/SEU_USUARIO/AppData/Local/Temp/ciclus_pytest
 ```
 
-## Seguranca e privacidade
+## Deploy
 
-Este projeto lida com documentos que podem conter dados pessoais, fiscais, financeiros e de clientes. Trate todos os arquivos locais como sensiveis.
+A arquitetura documentada utiliza FastAPI atrás de Nginx, gerenciado por systemd, com SQLite e uploads persistentes. Consulte os guias públicos de [deploy](docs/deploy-ciclus-vps.md) e [operação](docs/operacao-ciclus-rdv.md) antes de qualquer instalação controlada.
 
-Nao subir para o Git:
-
-- `.env`;
-- banco SQLite local, como `data/app.db`;
-- uploads;
-- imagens de notas reais;
-- recibos, comprovantes ou PDFs de clientes;
-- CSV com dados reais;
-- arquivos dentro de `output/` com dados processados;
-- qualquer token, telefone real, ID de midia ou payload sensivel.
-
-Mantenha fora do Git:
-
-- `data/app.db`;
-- `uploads/`;
-- `data/documentos/uploads/`;
-- `output/`;
-- imagens, PDFs e documentos locais sensiveis.
-
-Antes de qualquer push, revise sempre:
-
-```powershell
-git status --ignored
-git ls-files
-```
-
-## Estrutura resumida
-
-- `agents/`: agentes de processamento, como nota fiscal e recibo/comprovante.
-- `core/`: nucleo, persistencia SQLite e apoio de armazenamento/exportacao.
-- `services/`: servicos de orquestracao para processar arquivos e normalizar entradas.
-- `scripts/`: scripts auxiliares de diagnostico, teste e limpeza local.
-- `api.py`: API auxiliar para processar documentos por HTTP.
-- `api_whatsapp.py`: integracao com WhatsApp Cloud API e webhook.
-- `web_upload.py`: aplicacao web principal em FastAPI.
-- `requirements.txt`: dependencias Python do projeto.
-- `.env.example`: exemplo de variaveis de ambiente, sem valores reais.
-- `output/`: saidas locais, como CSVs gerados. Deve permanecer fora do Git quando contiver dados reais.
-- `data/`: banco local, arquivos auxiliares e uploads. Deve ser tratado como area sensivel.
-
-## Fluxo de uso
-
-1. O usuario envia um arquivo pelo upload web ou pelo WhatsApp.
-2. O sistema identifica o tipo do documento, usando formulario, legenda ou fluxo de API.
-3. O nucleo direciona o arquivo ao agente adequado.
-4. O agente tenta extrair dados por QR Code e/ou OCR.
-5. O resultado e salvo no SQLite e pode ser apoiado por CSV.
-6. O usuario revisa documentos validos em `/documentos`.
-7. O usuario revisa falhas ou registros incompletos em `/documentos/erros`.
-8. Os registros podem ser filtrados, editados, apagados e exportados em CSV.
-
-## Historico de evolucao
-
-- MVP inicial para processar nota fiscal a partir de imagem.
-- Suporte a recibos e comprovantes.
-- Inclusao de SQLite e painel web.
-- Leitura complementar por OCR.
-- Separacao de documentos com erro ou pendentes de conferencia.
-- Integracao com WhatsApp Cloud API.
-- Filtros por data, mes/ano, hora, tipo, categoria e origem/responsavel.
-- Exportacao CSV dos documentos filtrados.
-- Limpeza e protecao de arquivos sensiveis no Git.
-
-## Relacao com o projeto lucreagro-ficha-unica
-
-O Ciclus Agro serviu como base pratica para aprendizados reutilizados no projeto `lucreagro-ficha-unica`, especialmente em:
-
-- upload de arquivos;
-- organizacao documental;
-- uso de SQLite;
-- painel web simples;
-- integracao com WhatsApp;
-- seguranca com arquivos locais e dados sensiveis.
-
-## Aviso
-
-O Ciclus Agro e um projeto de automacao aplicada em evolucao. Para uso em producao, ainda seria necessario reforcar autenticacao, autorizacao, auditoria, backups, tratamento de dados pessoais, armazenamento seguro de arquivos e politicas formais de retencao.
-
-## Producao Ciclus/RDV
-
-A instalacao atual do Ciclus/RDV em VPS possui documentacao separada:
-
-- [Deploy na VPS](docs/deploy-ciclus-vps.md)
-- [Operacao e recuperacao](docs/operacao-ciclus-rdv.md)
-
-Os exemplos de `systemd`, Nginx e backup ficam em `deploy/examples/` e nao
-contem credenciais, dados reais ou certificados.
+Configurações, certificados, dados e credenciais de produção permanecem fora do repositório.
