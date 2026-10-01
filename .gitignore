@@ -15,6 +15,7 @@ __pycache__/
 *.db
 *.sqlite
 data/app.db
+data/audio_annotation_evidence/
 
 # Arquivos gerados e dados locais
 output/
@@ -23,6 +24,9 @@ logs/
 data/documentos/uploads/
 uploads/
 backups/
+data/debug_audio/
+.pytest_*/
+.pytest_verify/
 
 # Scripts destrutivos mantidos apenas para operacao local
 scripts/limpar_banco_rdv_ciclus.py
@@ -35,6 +39,7 @@ scripts/test_limpar_banco_rdv_ciclus.py
 *.webp
 *.pdf
 *.ogg
+*.oga
 *.opus
 *.mp3
 *.m4a

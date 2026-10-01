@@ -293,78 +293,68 @@ def test_comandos_diretos_continuam_funcionando():
         api_whatsapp.whatsapp_menu_states.clear()
 
 
-def test_payload_menu_principal_interativo(monkeypatch):
-    monkeypatch.setenv("ASSISTENTE_INTELIGENTE_ENABLED", "false")
-    sent = []
-    original_sender = api_whatsapp.send_whatsapp_list_message
-    try:
-        api_whatsapp.send_whatsapp_list_message = lambda **kwargs: sent.append(kwargs)
-
-        api_whatsapp.send_main_menu_interactive("5500000000001")
-
-        kwargs = sent[0]
-    finally:
-        api_whatsapp.send_whatsapp_list_message = original_sender
-
-    payload = api_whatsapp._build_whatsapp_list_payload(
-        to=kwargs["to"],
-        header=kwargs["header"],
-        body=kwargs["body"],
-        button_text=kwargs["button_text"],
-        sections=kwargs["sections"],
+def test_menu_principal_envia_resposta_neutra_sem_lista_interativa(monkeypatch):
+    sent_texts = []
+    list_calls = []
+    monkeypatch.setattr(
+        api_whatsapp,
+        "send_whatsapp_text",
+        lambda to, message: sent_texts.append((to, message)),
     )
-
-    assert payload["messaging_product"] == "whatsapp"
-    assert payload["to"] == "5500000000001"
-    assert payload["type"] == "interactive"
-    assert payload["interactive"]["type"] == "list"
-    assert payload["interactive"]["header"]["text"] == "🌱 Ciclus Agro"
-    assert payload["interactive"]["body"]["text"] == "Escolha uma opção para continuar:"
-    assert payload["interactive"]["action"]["button"] == "Abrir menu"
-    rows = payload["interactive"]["action"]["sections"][0]["rows"]
-    assert rows == [
-        {
-            "id": "menu_visit_start",
-            "title": "🌱 Nova visita técnica",
-            "description": "Registrar fazenda visitada",
-        },
-        {
-            "id": "menu_audio_transcription",
-            "title": "🎙️ Transcrever áudio",
-            "description": "Receber a transcrição em texto",
-        },
-        {
-            "id": "menu_reports",
-            "title": "📄 Relatórios visitas",
-            "description": "Consultar visitas finalizadas",
-        },
-    ]
-
-
-def test_menu_publico_nao_envia_instrucoes_legadas(monkeypatch):
-    sent = []
     monkeypatch.setattr(
         api_whatsapp,
         "send_whatsapp_list_message",
-        lambda **kwargs: sent.append(kwargs),
+        lambda **kwargs: list_calls.append(kwargs),
     )
 
     api_whatsapp.send_main_menu_interactive("5500000000001")
 
-    menu = sent[0]
-    visible = " ".join(
-        [menu["header"], menu["body"], menu["fallback_text"]]
-        + [
-            " ".join(str(value) for value in row.values())
-            for section in menu["sections"]
-            for row in section["rows"]
-        ]
-    ).lower()
-    assert "ciclus agro - rdv por whatsapp" not in visible
-    assert "digite km" not in visible
-    assert "digite resumo" not in visible
-    assert "digite planilha" not in visible
-    assert "comprovante" not in visible
+    assert sent_texts == [("5500000000001", api_whatsapp.MAIN_MENU_MESSAGE)]
+    assert list_calls == []
+    visible = api_whatsapp.MAIN_MENU_MESSAGE.lower()
+    for option in (
+        "nova visita",
+        "transcrever",
+        "rdv",
+        "quilometragem",
+        "comprovante",
+        "relat",
+    ):
+        assert option not in visible
+
+
+def test_webhook_de_menu_continua_funcionando_sem_expor_opcoes(monkeypatch):
+    original_rdv = api_whatsapp.rdv_service
+    original_visitas = api_whatsapp.visitas_service
+    sent_texts = []
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _rdv, _visitas, sender = _install_services(temp_dir)
+            monkeypatch.setattr(
+                api_whatsapp,
+                "send_whatsapp_text",
+                lambda to, message: sent_texts.append((to, message)),
+            )
+            monkeypatch.setattr(
+                api_whatsapp,
+                "_was_whatsapp_message_processed",
+                lambda message_id: False,
+            )
+
+            api_whatsapp._handle_whatsapp_message(
+                {
+                    "from": sender,
+                    "id": "wamid.menu.clear",
+                    "type": "text",
+                    "text": {"body": "menu"},
+                }
+            )
+
+            assert sent_texts == [(sender, api_whatsapp.MAIN_MENU_MESSAGE)]
+    finally:
+        api_whatsapp.rdv_service = original_rdv
+        api_whatsapp.visitas_service = original_visitas
+        api_whatsapp.whatsapp_menu_states.clear()
 
 
 def test_fallback_textual_desconhecido_retorna_menu_publico():

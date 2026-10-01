@@ -366,6 +366,9 @@ STANDALONE_TRANSCRIPTION_EXIT_COMMANDS = {
 }
 STANDALONE_TRANSCRIPTION_STATE = "audio_transcription_waiting"
 STANDALONE_TRANSCRIPTION_MODE_STATE = "audio_transcription_select_mode"
+PERSONAL_AUDIO_TRANSCRIBER_ALLOWLIST_ENV = "WHATSAPP_AUDIO_TRANSCRIBER_ALLOWLIST"
+PERSONAL_AUDIO_TRANSCRIBER_MODE_ENV = "WHATSAPP_AUDIO_TRANSCRIBER_MODE"
+PERSONAL_AUDIO_TRANSCRIBER_DEFAULT_MODE = "revisada"
 VISITA_AUDIO_REVIEW_CONTEXT_BY_STATE = {
     "aguardando_descricao_visita": "visita_descricao",
     "aguardando_edicao_descricao": "visita_descricao",
@@ -493,22 +496,8 @@ REPORTS_MENU_MESSAGE = "\n".join(
         "* km cancelar",
     ]
 )
-MENU_NUMBER_MESSAGE = 'Digite "menu" para ver os comandos disponíveis.'
-
-# Product navigation intentionally exposes only visits and standalone audio.
-# RDV/KM/document implementations remain available internally, but are not
-# advertised in the normal flow.
-MAIN_MENU_MESSAGE = "\n".join(
-    [
-        "🌱 Ciclus Agro",
-        "",
-        "Escolha uma opção para continuar:",
-        "",
-        "1. Nova visita técnica",
-        "2. Transcrever áudio",
-        "3. Relatórios de visitas",
-    ]
-)
+MAIN_MENU_MESSAGE = "Ciclus Agro 🌱\nAtendimento em atualização."
+MENU_NUMBER_MESSAGE = MAIN_MENU_MESSAGE
 REPORTS_MENU_MESSAGE = "\n".join(
     [
         "Relatórios de visitas disponíveis:",
@@ -915,104 +904,11 @@ def send_whatsapp_button_message(
 
 
 def send_main_menu_interactive(to: str) -> None:
-    sections = [
-        {
-            "title": "Menu principal",
-            "rows": [
-                {
-                    "id": "menu_rdv_receipt",
-                    "title": "🧾 Lançar comprovante",
-                    "description": "Enviar foto ou PDF",
-                },
-                {
-                    "id": "menu_km",
-                    "title": "🚗 Registrar KM",
-                    "description": "Iniciar ou finalizar viagem",
-                },
-                {
-                    "id": "menu_visit_start",
-                    "title": "🌱 Nova visita técnica",
-                    "description": "Registrar fazenda visitada",
-                },
-                {
-                    "id": "menu_audio_transcription",
-                    "title": "🎙️ Transcrever áudio",
-                    "description": "Receber a transcrição em texto",
-                },
-                {
-                    "id": "menu_rdv_summary",
-                    "title": "📊 Resumo RDV",
-                    "description": "Ver resumo mensal",
-                },
-                {
-                    "id": "menu_rdv_excel",
-                    "title": "📎 Planilha RDV",
-                    "description": "Receber Excel mensal",
-                },
-                {
-                    "id": "menu_reports",
-                    "title": "📋 Relatórios",
-                    "description": "Ver relatórios disponíveis",
-                },
-                {
-                    "id": "menu_help",
-                    "title": "❓ Ajuda",
-                    "description": "Ver comandos e orientações",
-                },
-            ],
-        },
-    ]
-    sections[0]["rows"] = [
-        {
-            "id": "menu_visit_start",
-            "title": "🌱 Nova visita técnica",
-            "description": "Registrar fazenda visitada",
-        },
-        {
-            "id": "menu_audio_transcription",
-            "title": "🎙️ Transcrever áudio",
-            "description": "Receber a transcrição em texto",
-        },
-    ]
-    if _is_assistente_inteligente_enabled():
-        sections[0]["rows"].append(
-            {
-                "id": "menu_assistente_inteligente",
-                "title": "🤖 Assistente Inteligente",
-                "description": "Conversar com a Ciclus",
-            }
-        )
-    sections[0]["rows"].append(
-        {
-            "id": "menu_reports",
-            "title": "📄 Relatórios visitas",
-            "description": "Consultar visitas finalizadas",
-        }
-    )
-    send_whatsapp_list_message(
-        to=to,
-        header="🌱 Ciclus Agro",
-        body="Escolha uma opção para continuar:",
-        button_text="Abrir menu",
-        sections=sections,
-        fallback_text=_main_menu_fallback_message(),
-    )
+    send_whatsapp_text(to, MAIN_MENU_MESSAGE)
 
 
 def _main_menu_fallback_message() -> str:
-    lines = [
-        "🌱 Ciclus Agro",
-        "",
-        "Escolha uma opção para continuar:",
-        "",
-        "1. Nova visita técnica",
-        "2. Transcrever áudio",
-    ]
-    if _is_assistente_inteligente_enabled():
-        lines.extend(["3. Assistente Inteligente", "4. Relatórios de visitas"])
-    else:
-        lines.append("3. Relatórios de visitas")
-    return "\n".join(lines)
+    return MAIN_MENU_MESSAGE
 
 
 VISIT_REPORTS_FIRST_PAGE_SIZE = 9
@@ -1521,11 +1417,21 @@ def _handle_whatsapp_message(message: dict) -> None:
             return
 
     if message_type in {"audio", "voice"}:
+        personal_audio_reply = _handle_personal_audio_transcriber_message(
+            sender_phone,
+            media_id,
+            mime_type,
+            whatsapp_message_id=message_id,
+        )
+        if personal_audio_reply is not None:
+            _safe_send_text_chunks(sender_phone, personal_audio_reply)
+            return
         standalone_mode = _is_standalone_transcription_session(sender_phone)
         reply = handle_whatsapp_audio_message(
             sender_phone=sender_phone,
             media_id=media_id,
             mime_type=mime_type,
+            whatsapp_message_id=message_id,
         )
         if reply:
             if standalone_mode:
@@ -2101,10 +2007,70 @@ def handle_rdv_audio_comment_message(
     return message
 
 
+def _personal_audio_transcriber_allowlist() -> set[str]:
+    raw_allowlist = os.getenv(PERSONAL_AUDIO_TRANSCRIBER_ALLOWLIST_ENV, "")
+    return {
+        normalized
+        for item in str(raw_allowlist or "").replace(";", ",").split(",")
+        if (normalized := normalize_phone(item))
+    }
+
+
+def _is_personal_audio_transcriber_allowed(sender_phone: str) -> bool:
+    normalized_phone = normalize_phone(sender_phone)
+    return bool(
+        normalized_phone
+        and normalized_phone in _personal_audio_transcriber_allowlist()
+    )
+
+
+def _personal_audio_transcriber_mode() -> str:
+    configured_mode = str(
+        os.getenv(
+            PERSONAL_AUDIO_TRANSCRIBER_MODE_ENV,
+            PERSONAL_AUDIO_TRANSCRIBER_DEFAULT_MODE,
+        )
+        or ""
+    ).strip().lower()
+    if configured_mode in {"literal", "revisada"}:
+        return configured_mode
+    return PERSONAL_AUDIO_TRANSCRIBER_DEFAULT_MODE
+
+
+def _handle_personal_audio_transcriber_message(
+    sender_phone: str,
+    media_id: str,
+    mime_type: str,
+    *,
+    whatsapp_message_id: str | None = None,
+) -> str | None:
+    if not _is_personal_audio_transcriber_allowed(sender_phone):
+        return None
+    if sender_phone in whatsapp_menu_states or sender_phone in standalone_transcription_modes:
+        return None
+    if _get_rdv_comment_state(sender_phone) is not None:
+        return None
+
+    whatsapp_menu_states[sender_phone] = STANDALONE_TRANSCRIPTION_STATE
+    standalone_transcription_modes[sender_phone] = _personal_audio_transcriber_mode()
+    try:
+        return handle_whatsapp_audio_message(
+            sender_phone,
+            media_id,
+            mime_type,
+            whatsapp_message_id=whatsapp_message_id,
+        )
+    finally:
+        whatsapp_menu_states.pop(sender_phone, None)
+        standalone_transcription_modes.pop(sender_phone, None)
+
+
 def handle_whatsapp_audio_message(
     sender_phone: str,
     media_id: str,
     mime_type: str = "",
+    *,
+    whatsapp_message_id: str | None = None,
 ) -> str:
     active_visit = _get_active_visita_for_phone(sender_phone)
     if active_visit is not None:

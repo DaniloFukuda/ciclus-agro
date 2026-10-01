@@ -30,30 +30,18 @@ def _visit(visitas, phone: str, farm: str, status: str = "fechada"):
     return visitas.obter_visita_por_id(visita["id"])
 
 
-def test_menu_publico_expoe_quatro_opcoes_sem_legados(monkeypatch):
-    captured = []
+def test_menu_publico_nao_expoe_opcoes(monkeypatch):
+    sent_texts = []
     monkeypatch.setattr(api_whatsapp, "_is_assistente_inteligente_enabled", lambda: True)
     monkeypatch.setattr(
         api_whatsapp,
-        "send_whatsapp_list_message",
-        lambda **kwargs: captured.append(kwargs),
+        "send_whatsapp_text",
+        lambda to, text: sent_texts.append((to, text)),
     )
 
     api_whatsapp.send_main_menu_interactive(SENDER)
 
-    rows = captured[0]["sections"][0]["rows"]
-    ids = [row["id"] for row in rows]
-    assert ids == [
-        "menu_visit_start",
-        "menu_audio_transcription",
-        "menu_assistente_inteligente",
-        "menu_reports",
-    ]
-    menu_text = " ".join(row["title"] for row in rows).lower()
-    assert "rdv" not in menu_text
-    assert "km" not in menu_text
-    assert "resumo" not in menu_text
-    assert "planilha" not in menu_text
+    assert sent_texts == [(SENDER, api_whatsapp.MAIN_MENU_MESSAGE)]
 
 
 def test_historico_lista_so_fechadas_do_usuario_e_limita_dez(monkeypatch):
