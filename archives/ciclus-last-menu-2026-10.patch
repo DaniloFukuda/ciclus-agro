@@ -1,0 +1,342 @@
+--- a/api_whatsapp.py
++++ b/api_whatsapp.py
+@@ -507,8 +507,22 @@
+         "* km cancelar",
+     ]
+ )
+-MAIN_MENU_MESSAGE = "Ciclus Agro 🌱\nAtendimento em atualização."
+-MENU_NUMBER_MESSAGE = MAIN_MENU_MESSAGE
++MENU_NUMBER_MESSAGE = 'Digite "menu" para ver os comandos disponíveis.'
++
++# Product navigation intentionally exposes only visits and standalone audio.
++# RDV/KM/document implementations remain available internally, but are not
++# advertised in the normal flow.
++MAIN_MENU_MESSAGE = "\n".join(
++    [
++        "🌱 Ciclus Agro",
++        "",
++        "Escolha uma opção para continuar:",
++        "",
++        "1. Nova visita técnica",
++        "2. Transcrever áudio",
++        "3. Relatórios de visitas",
++    ]
++)
+ REPORTS_MENU_MESSAGE = "\n".join(
+     [
+         "Relatórios de visitas disponíveis:",
+@@ -916,11 +930,104 @@
+ 
+ 
+ def send_main_menu_interactive(to: str) -> None:
+-    send_whatsapp_text(to, MAIN_MENU_MESSAGE)
++    sections = [
++        {
++            "title": "Menu principal",
++            "rows": [
++                {
++                    "id": "menu_rdv_receipt",
++                    "title": "🧾 Lançar comprovante",
++                    "description": "Enviar foto ou PDF",
++                },
++                {
++                    "id": "menu_km",
++                    "title": "🚗 Registrar KM",
++                    "description": "Iniciar ou finalizar viagem",
++                },
++                {
++                    "id": "menu_visit_start",
++                    "title": "🌱 Nova visita técnica",
++                    "description": "Registrar fazenda visitada",
++                },
++                {
++                    "id": "menu_audio_transcription",
++                    "title": "🎙️ Transcrever áudio",
++                    "description": "Receber a transcrição em texto",
++                },
++                {
++                    "id": "menu_rdv_summary",
++                    "title": "📊 Resumo RDV",
++                    "description": "Ver resumo mensal",
++                },
++                {
++                    "id": "menu_rdv_excel",
++                    "title": "📎 Planilha RDV",
++                    "description": "Receber Excel mensal",
++                },
++                {
++                    "id": "menu_reports",
++                    "title": "📋 Relatórios",
++                    "description": "Ver relatórios disponíveis",
++                },
++                {
++                    "id": "menu_help",
++                    "title": "❓ Ajuda",
++                    "description": "Ver comandos e orientações",
++                },
++            ],
++        },
++    ]
++    sections[0]["rows"] = [
++        {
++            "id": "menu_visit_start",
++            "title": "🌱 Nova visita técnica",
++            "description": "Registrar fazenda visitada",
++        },
++        {
++            "id": "menu_audio_transcription",
++            "title": "🎙️ Transcrever áudio",
++            "description": "Receber a transcrição em texto",
++        },
++    ]
++    if _is_assistente_inteligente_enabled():
++        sections[0]["rows"].append(
++            {
++                "id": "menu_assistente_inteligente",
++                "title": "🤖 Assistente Inteligente",
++                "description": "Conversar com a Ciclus",
++            }
++        )
++    sections[0]["rows"].append(
++        {
++            "id": "menu_reports",
++            "title": "📄 Relatórios visitas",
++            "description": "Consultar visitas finalizadas",
++        }
++    )
++    send_whatsapp_list_message(
++        to=to,
++        header="🌱 Ciclus Agro",
++        body="Escolha uma opção para continuar:",
++        button_text="Abrir menu",
++        sections=sections,
++        fallback_text=_main_menu_fallback_message(),
++    )
+ 
+ 
+ def _main_menu_fallback_message() -> str:
+-    return MAIN_MENU_MESSAGE
++    lines = [
++        "🌱 Ciclus Agro",
++        "",
++        "Escolha uma opção para continuar:",
++        "",
++        "1. Nova visita técnica",
++        "2. Transcrever áudio",
++    ]
++    if _is_assistente_inteligente_enabled():
++        lines.extend(["3. Assistente Inteligente", "4. Relatórios de visitas"])
++    else:
++        lines.append("3. Relatórios de visitas")
++    return "\n".join(lines)
+ 
+ 
+ VISIT_REPORTS_FIRST_PAGE_SIZE = 9
+--- a/tests/test_whatsapp_menu_flow.py
++++ b/tests/test_whatsapp_menu_flow.py
+@@ -293,68 +293,78 @@
+         api_whatsapp.whatsapp_menu_states.clear()
+ 
+ 
+-def test_menu_principal_envia_resposta_neutra_sem_lista_interativa(monkeypatch):
+-    sent_texts = []
+-    list_calls = []
+-    monkeypatch.setattr(
+-        api_whatsapp,
+-        "send_whatsapp_text",
+-        lambda to, message: sent_texts.append((to, message)),
++def test_payload_menu_principal_interativo(monkeypatch):
++    monkeypatch.setenv("ASSISTENTE_INTELIGENTE_ENABLED", "false")
++    sent = []
++    original_sender = api_whatsapp.send_whatsapp_list_message
++    try:
++        api_whatsapp.send_whatsapp_list_message = lambda **kwargs: sent.append(kwargs)
++
++        api_whatsapp.send_main_menu_interactive("5500000000001")
++
++        kwargs = sent[0]
++    finally:
++        api_whatsapp.send_whatsapp_list_message = original_sender
++
++    payload = api_whatsapp._build_whatsapp_list_payload(
++        to=kwargs["to"],
++        header=kwargs["header"],
++        body=kwargs["body"],
++        button_text=kwargs["button_text"],
++        sections=kwargs["sections"],
+     )
++
++    assert payload["messaging_product"] == "whatsapp"
++    assert payload["to"] == "5500000000001"
++    assert payload["type"] == "interactive"
++    assert payload["interactive"]["type"] == "list"
++    assert payload["interactive"]["header"]["text"] == "🌱 Ciclus Agro"
++    assert payload["interactive"]["body"]["text"] == "Escolha uma opção para continuar:"
++    assert payload["interactive"]["action"]["button"] == "Abrir menu"
++    rows = payload["interactive"]["action"]["sections"][0]["rows"]
++    assert rows == [
++        {
++            "id": "menu_visit_start",
++            "title": "🌱 Nova visita técnica",
++            "description": "Registrar fazenda visitada",
++        },
++        {
++            "id": "menu_audio_transcription",
++            "title": "🎙️ Transcrever áudio",
++            "description": "Receber a transcrição em texto",
++        },
++        {
++            "id": "menu_reports",
++            "title": "📄 Relatórios visitas",
++            "description": "Consultar visitas finalizadas",
++        },
++    ]
++
++
++def test_menu_publico_nao_envia_instrucoes_legadas(monkeypatch):
++    sent = []
+     monkeypatch.setattr(
+         api_whatsapp,
+         "send_whatsapp_list_message",
+-        lambda **kwargs: list_calls.append(kwargs),
++        lambda **kwargs: sent.append(kwargs),
+     )
+ 
+     api_whatsapp.send_main_menu_interactive("5500000000001")
+ 
+-    assert sent_texts == [("5500000000001", api_whatsapp.MAIN_MENU_MESSAGE)]
+-    assert list_calls == []
+-    visible = api_whatsapp.MAIN_MENU_MESSAGE.lower()
+-    for option in (
+-        "nova visita",
+-        "transcrever",
+-        "rdv",
+-        "quilometragem",
+-        "comprovante",
+-        "relat",
+-    ):
+-        assert option not in visible
+-
+-
+-def test_webhook_de_menu_continua_funcionando_sem_expor_opcoes(monkeypatch):
+-    original_rdv = api_whatsapp.rdv_service
+-    original_visitas = api_whatsapp.visitas_service
+-    sent_texts = []
+-    try:
+-        with tempfile.TemporaryDirectory() as temp_dir:
+-            _rdv, _visitas, sender = _install_services(temp_dir)
+-            monkeypatch.setattr(
+-                api_whatsapp,
+-                "send_whatsapp_text",
+-                lambda to, message: sent_texts.append((to, message)),
+-            )
+-            monkeypatch.setattr(
+-                api_whatsapp,
+-                "_was_whatsapp_message_processed",
+-                lambda message_id: False,
+-            )
+-
+-            api_whatsapp._handle_whatsapp_message(
+-                {
+-                    "from": sender,
+-                    "id": "wamid.menu.clear",
+-                    "type": "text",
+-                    "text": {"body": "menu"},
+-                }
+-            )
+-
+-            assert sent_texts == [(sender, api_whatsapp.MAIN_MENU_MESSAGE)]
+-    finally:
+-        api_whatsapp.rdv_service = original_rdv
+-        api_whatsapp.visitas_service = original_visitas
+-        api_whatsapp.whatsapp_menu_states.clear()
++    menu = sent[0]
++    visible = " ".join(
++        [menu["header"], menu["body"], menu["fallback_text"]]
++        + [
++            " ".join(str(value) for value in row.values())
++            for section in menu["sections"]
++            for row in section["rows"]
++        ]
++    ).lower()
++    assert "ciclus agro - rdv por whatsapp" not in visible
++    assert "digite km" not in visible
++    assert "digite resumo" not in visible
++    assert "digite planilha" not in visible
++    assert "comprovante" not in visible
+ 
+ 
+ def test_fallback_textual_desconhecido_retorna_menu_publico():
+--- a/tests/test_assistente_inteligente_menu.py
++++ b/tests/test_assistente_inteligente_menu.py
+@@ -49,21 +49,20 @@
+     return captured
+ 
+ 
+-def test_menu_texto_base_nao_expoe_funcionalidades():
++def test_menu_texto_base_expoe_somente_visitas_e_transcricao():
+     texto = api_whatsapp.MAIN_MENU_MESSAGE
+-    assert texto == "Ciclus Agro 🌱\nAtendimento em atualização."
+-    assert "Nova visita técnica" not in texto
+-    assert "Transcrever áudio" not in texto
++    assert "Nova visita técnica" in texto
++    assert "Transcrever áudio" in texto
+     assert "RDV" not in texto
+     assert "Comprovantes" not in texto
+     assert "KM" not in texto
+     assert "resumo" not in texto.lower()
+     assert "planilha" not in texto.lower()
+     assert "Assistente Inteligente" not in texto
+-    assert "Relatórios de visitas" not in texto
++    assert "Relatórios de visitas" in texto
+ 
+ 
+-def test_menu_principal_nao_adiciona_item_interativo_sem_flag(monkeypatch):
++def test_flag_ausente_nao_adiciona_item_interativo(monkeypatch):
+     monkeypatch.delenv("ASSISTENTE_INTELIGENTE_ENABLED", raising=False)
+     captured = _capture_list_rows(monkeypatch)
+     with tempfile.TemporaryDirectory() as td:
+@@ -72,10 +71,11 @@
+             api_whatsapp.send_main_menu_interactive(PHONE_OK)
+         finally:
+             _restore(orig_r, orig_v)
+-    assert captured == {}
++    ids = [row["id"] for row in captured["sections"][0]["rows"]]
++    assert "menu_assistente_inteligente" not in ids
+ 
+ 
+-def test_menu_principal_nao_adiciona_item_interativo_com_flag_falsa(monkeypatch):
++def test_flag_false_nao_adiciona_item_interativo(monkeypatch):
+     monkeypatch.setenv("ASSISTENTE_INTELIGENTE_ENABLED", "false")
+     captured = _capture_list_rows(monkeypatch)
+     with tempfile.TemporaryDirectory() as td:
+@@ -84,10 +84,11 @@
+             api_whatsapp.send_main_menu_interactive(PHONE_OK)
+         finally:
+             _restore(orig_r, orig_v)
+-    assert captured == {}
++    ids = [row["id"] for row in captured["sections"][0]["rows"]]
++    assert "menu_assistente_inteligente" not in ids
+ 
+ 
+-def test_flag_true_preserva_comando_assistente_sem_expo_lo_no_menu(monkeypatch):
++def test_flag_true_adiciona_assistente_ao_menu_publico(monkeypatch):
+     monkeypatch.setenv("ASSISTENTE_INTELIGENTE_ENABLED", "true")
+     captured = _capture_list_rows(monkeypatch)
+     with tempfile.TemporaryDirectory() as td:
+@@ -96,8 +97,13 @@
+             api_whatsapp.send_main_menu_interactive(PHONE_OK)
+         finally:
+             _restore(orig_r, orig_v)
+-    assert captured == {}
+-    assert "assistente" in api_whatsapp.ASSISTENTE_INTELIGENTE_COMMANDS
++    ids = [row["id"] for row in captured["sections"][0]["rows"]]
++    assert ids == [
++        "menu_visit_start",
++        "menu_audio_transcription",
++        "menu_assistente_inteligente",
++        "menu_reports",
++    ]
+ 
+ 
+ def test_item_interativo_convertido_para_comando_assistente():
